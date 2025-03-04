@@ -191,6 +191,7 @@ const SystemSettings = ({ initialData = {} }: SystemSettingsProps) => {
                             <FormControl>
                               <Input
                                 placeholder="Enter hotel name"
+                                id="hotelName"
                                 {...field}
                               />
                             </FormControl>
@@ -350,6 +351,7 @@ const SystemSettings = ({ initialData = {} }: SystemSettingsProps) => {
                                 <Input
                                   type="number"
                                   placeholder="Enter VAT rate"
+                                  id="vatRate"
                                   {...field}
                                   className="pl-8"
                                 />
@@ -375,6 +377,7 @@ const SystemSettings = ({ initialData = {} }: SystemSettingsProps) => {
                                 <Input
                                   type="number"
                                   placeholder="Enter service tax"
+                                  id="serviceTax"
                                   {...field}
                                   className="pl-8"
                                 />

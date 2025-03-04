@@ -21,6 +21,9 @@ export interface Database {
           status: string;
           total_amount: number;
           payment_status: string;
+          adults: number;
+          children: number;
+          notes?: string | null;
         };
         Insert: {
           id?: string;
@@ -33,6 +36,9 @@ export interface Database {
           status?: string;
           total_amount: number;
           payment_status?: string;
+          adults: number;
+          children: number;
+          notes?: string | null;
         };
         Update: {
           id?: string;
@@ -45,6 +51,9 @@ export interface Database {
           status?: string;
           total_amount?: number;
           payment_status?: string;
+          adults?: number;
+          children?: number;
+          notes?: string | null;
         };
       };
       rooms: {

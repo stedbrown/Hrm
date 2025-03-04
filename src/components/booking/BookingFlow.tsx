@@ -167,10 +167,9 @@ const BookingFlow = () => {
         status: "confirmed",
         total_amount: totalAmount,
         payment_status: values.payment_status,
-        notes: values.notes || null,
-        // Ripristina questi campi dopo aver applicato la migrazione
         adults: values.adults,
         children: values.children,
+        notes: values.notes || null
       };
 
       console.log("Dati della prenotazione da salvare:", bookingData);
@@ -329,7 +328,7 @@ const BookingFlow = () => {
                     <FormItem>
                       <FormLabel>Nome completo</FormLabel>
                       <FormControl>
-                        <Input placeholder="Mario Rossi" {...field} />
+                        <Input placeholder="Mario Rossi" id="guest_name" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -345,6 +344,7 @@ const BookingFlow = () => {
                         <Input
                           type="email"
                           placeholder="mario.rossi@example.com"
+                          id="guest_email"
                           {...field}
                         />
                       </FormControl>
@@ -364,6 +364,7 @@ const BookingFlow = () => {
                             type="number"
                             min={1}
                             max={6}
+                            id="adults"
                             {...field}
                           />
                         </FormControl>
@@ -382,6 +383,7 @@ const BookingFlow = () => {
                             type="number"
                             min={0}
                             max={4}
+                            id="children"
                             {...field}
                           />
                         </FormControl>
@@ -652,6 +654,7 @@ const BookingFlow = () => {
                       <FormControl>
                         <Input
                           placeholder="Note aggiuntive (opzionale)"
+                          id="notes"
                           {...field}
                         />
                       </FormControl>

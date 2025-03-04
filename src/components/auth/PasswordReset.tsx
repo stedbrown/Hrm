@@ -114,6 +114,7 @@ const PasswordReset = ({ onCancel }: PasswordResetProps) => {
                       <Input
                         placeholder="your.email@example.com"
                         type="email"
+                        id="email"
                         {...field}
                       />
                     </FormControl>

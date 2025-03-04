@@ -187,7 +187,7 @@ const SignUpForm = ({
                 <FormItem>
                   <FormLabel>Full Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="John Doe" {...field} />
+                    <Input placeholder="John Doe" id="name" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -204,6 +204,7 @@ const SignUpForm = ({
                     <Input
                       placeholder="your.email@example.com"
                       type="email"
+                      id="email"
                       {...field}
                     />
                   </FormControl>
@@ -223,6 +224,7 @@ const SignUpForm = ({
                       <Input
                         placeholder="••••••••"
                         type={showPassword ? "text" : "password"}
+                        id="password"
                         {...field}
                       />
                       <Button

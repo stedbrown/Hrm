@@ -458,7 +458,7 @@ const MenuManager = ({
                     <FormItem>
                       <FormLabel>Item Name</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g. Classic Burger" {...field} />
+                        <Input placeholder="e.g. Classic Burger" id="name" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -476,6 +476,7 @@ const MenuManager = ({
                           <Input
                             placeholder="0.00"
                             className="pl-8"
+                            id="price"
                             {...field}
                           />
                         </div>
@@ -496,6 +497,7 @@ const MenuManager = ({
                       <Textarea
                         placeholder="Describe the menu item..."
                         className="resize-none"
+                        id="description"
                         {...field}
                       />
                     </FormControl>

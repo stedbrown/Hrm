@@ -7,7 +7,7 @@ import { AuthProvider } from "./components/auth/AuthProvider";
 
 const basename = import.meta.env.BASE_URL;
 
-// Configurazione del router con il future flag per risolvere l'avviso
+// Configurazione semplificata del router senza flag future
 const router = createBrowserRouter([
   {
     path: "*",
@@ -18,10 +18,7 @@ const router = createBrowserRouter([
     )
   }
 ], {
-  basename,
-  future: {
-    v7_relativeSplatPath: true
-  }
+  basename
 });
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

@@ -364,7 +364,10 @@ const BookingDetails = () => {
 
                 <div className="flex items-center text-sm">
                   <Users className="h-4 w-4 mr-2 text-gray-400" />
-                  <span>{booking.num_guests || 1} ospiti</span>
+                  <span>
+                    {booking.adults || 1} {booking.adults === 1 ? 'adulto' : 'adulti'}
+                    {booking.children > 0 && `, ${booking.children} ${booking.children === 1 ? 'bambino' : 'bambini'}`}
+                  </span>
                 </div>
 
                 <Separator />
@@ -373,6 +376,13 @@ const BookingDetails = () => {
                   <p className="text-sm font-medium mb-2">Richieste Speciali</p>
                   <p className="text-sm">
                     {booking.special_requests || "Nessuna richiesta speciale"}
+                  </p>
+                </div>
+
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <p className="text-sm font-medium mb-2">Note</p>
+                  <p className="text-sm">
+                    {booking.notes || "Nessuna nota"}
                   </p>
                 </div>
               </CardContent>

@@ -228,6 +228,9 @@ export async function fetchRoomsWithOccupancy(startDate?: string, endDate?: stri
         status,
         payment_status,
         total_amount,
+        adults,
+        children,
+        notes,
         created_at
       `)
       .or(`check_out.gte.${currentDate}`); // Prenotazioni attuali o future

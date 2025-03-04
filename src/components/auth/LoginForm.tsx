@@ -147,6 +147,7 @@ const LoginForm = ({
                     <Input
                       placeholder="your.email@example.com"
                       type="email"
+                      id="email"
                       {...field}
                     />
                   </FormControl>
@@ -166,6 +167,7 @@ const LoginForm = ({
                       <Input
                         placeholder="••••••••"
                         type={showPassword ? "text" : "password"}
+                        id="password"
                         {...field}
                       />
                       <Button

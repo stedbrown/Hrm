@@ -335,7 +335,7 @@ const RoomManagement = () => {
                       <FormItem>
                         <FormLabel>Numero Camera</FormLabel>
                         <FormControl>
-                          <Input placeholder="101" {...field} />
+                          <Input placeholder="101" id="room_number" {...field} />
                         </FormControl>
                         <FormDescription>
                           Inserisci il numero identificativo della camera
@@ -387,6 +387,7 @@ const RoomManagement = () => {
                           <Input
                             type="number"
                             min="1"
+                            id="capacity"
                             {...field}
                             onChange={(e) =>
                               field.onChange(parseInt(e.target.value, 10))
@@ -409,8 +410,9 @@ const RoomManagement = () => {
                         <FormControl>
                           <Input
                             type="number"
-                            min="0.01"
+                            min="0"
                             step="0.01"
+                            id="price_per_night"
                             {...field}
                             onChange={(e) =>
                               field.onChange(parseFloat(e.target.value))
