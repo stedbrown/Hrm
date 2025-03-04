@@ -83,13 +83,15 @@ type FormValues = z.infer<typeof formSchema>;
 const BookingFlow = () => {
   const [step, setStep] = useState<number>(1);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [selectedRoomId, setSelectedRoomId] = useState<string>("");
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [bookingSummary, setBookingSummary] = useState<FormValues | null>(null);
   const [rooms, setRooms] = useState<any[]>([]);
+  const [availableRooms, setAvailableRooms] = useState<any[]>([]);
   const { toast } = useToast();
   const navigate = useNavigate();
   const [bookingSuccess, setBookingSuccess] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
+  const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -112,6 +114,10 @@ const BookingFlow = () => {
         const roomsData = await fetchRooms();
         console.log("Camere caricate dal database:", roomsData);
         setRooms(roomsData);
+        
+        // Inizializza anche le camere disponibili
+        // All'inizio, senza date selezionate, tutte le camere sono potenzialmente disponibili
+        setAvailableRooms(roomsData);
       } catch (error) {
         console.error("Errore nel caricamento delle camere:", error);
         toast({
@@ -126,6 +132,110 @@ const BookingFlow = () => {
 
     loadRooms();
   }, [toast]);
+
+  // Funzione per filtrare le camere disponibili in base alle date selezionate
+  const filterAvailableRooms = async () => {
+    const checkIn = form.getValues("check_in");
+    const checkOut = form.getValues("check_out");
+    
+    if (!checkIn || !checkOut) {
+      // Se le date non sono selezionate, non filtrare le camere
+      setAvailableRooms(rooms);
+      return;
+    }
+    
+    // Verifica che le date siano valide
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    if (checkIn < today) {
+      form.setError("check_in", { 
+        type: "manual", 
+        message: "La data di check-in non può essere nel passato" 
+      });
+      return;
+    }
+    
+    // Verifica che la data di check-in non sia troppo lontana nel futuro (es. max 1 anno)
+    const oneYearFromNow = new Date();
+    oneYearFromNow.setFullYear(oneYearFromNow.getFullYear() + 1);
+    
+    if (checkIn > oneYearFromNow) {
+      form.setError("check_in", { 
+        type: "manual", 
+        message: "La data di check-in non può essere oltre un anno nel futuro" 
+      });
+      return;
+    }
+    
+    // Verifica che il soggiorno non sia troppo lungo (es. max 30 giorni)
+    const maxStayDays = 30;
+    const stayDurationMs = checkOut.getTime() - checkIn.getTime();
+    const stayDurationDays = stayDurationMs / (1000 * 60 * 60 * 24);
+    
+    if (stayDurationDays > maxStayDays) {
+      form.setError("check_out", { 
+        type: "manual", 
+        message: `La durata del soggiorno non può superare ${maxStayDays} giorni` 
+      });
+      return;
+    }
+    
+    setIsCheckingAvailability(true);
+    
+    try {
+      console.log("Verifica disponibilità camere per le date:", checkIn, checkOut);
+      
+      // Array per memorizzare le promesse di verifica disponibilità
+      const availabilityChecks = rooms.map(async (room) => {
+        const isAvailable = await isRoomAvailable(room.id, checkIn, checkOut);
+        return { ...room, isAvailable };
+      });
+      
+      // Attendi che tutte le verifiche siano completate
+      const roomsWithAvailability = await Promise.all(availabilityChecks);
+      
+      // Filtra solo le camere disponibili
+      const available = roomsWithAvailability.filter(room => room.isAvailable);
+      
+      console.log("Camere disponibili:", available.length, "su", rooms.length);
+      setAvailableRooms(available);
+      
+      // Se la camera selezionata non è più disponibile, deselezionala
+      if (selectedRoomId && !available.some(room => room.id === selectedRoomId)) {
+        setSelectedRoomId(null);
+        form.setValue("room_id", "");
+      }
+      
+      // Mostra un messaggio se non ci sono camere disponibili
+      if (available.length === 0) {
+        toast({
+          title: "Nessuna camera disponibile",
+          description: "Non ci sono camere disponibili per le date selezionate. Prova a selezionare date diverse.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Errore durante la verifica della disponibilità:", error);
+      toast({
+        title: "Errore",
+        description: "Si è verificato un errore durante la verifica della disponibilità delle camere",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCheckingAvailability(false);
+    }
+  };
+  
+  // Aggiorna le camere disponibili quando cambiano le date
+  useEffect(() => {
+    const checkIn = form.getValues("check_in");
+    const checkOut = form.getValues("check_out");
+    
+    if (checkIn && checkOut) {
+      filterAvailableRooms();
+    }
+  }, [form.watch("check_in"), form.watch("check_out")]);
 
   const onSubmit = async (values: FormValues) => {
     try {
@@ -175,18 +285,24 @@ const BookingFlow = () => {
       console.log("Dati della prenotazione da salvare:", bookingData);
 
       // Salva la prenotazione nel database
+      console.log("Tentativo di salvare la prenotazione nel database...");
       const { data, error } = await supabase
         .from("bookings")
         .insert(bookingData)
         .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Errore durante il salvataggio della prenotazione:", error);
+        throw error;
+      }
 
-      // Aggiorna lo stato della camera a "reserved"
-      await supabase
-        .from("rooms")
-        .update({ status: "reserved" })
-        .eq("id", values.room_id);
+      // Verifica che i dati siano stati restituiti correttamente
+      if (!data || data.length === 0) {
+        console.error("La prenotazione è stata creata ma non è stato possibile recuperare i dati");
+        throw new Error("La prenotazione è stata creata ma non è stato possibile recuperare i dati");
+      }
+
+      console.log("Prenotazione creata con successo:", data[0]);
 
       // Crea una notifica per la nuova prenotazione
       toast({
@@ -208,7 +324,7 @@ const BookingFlow = () => {
       // Resetta il form dopo 3 secondi e reindirizza
       setTimeout(() => {
         form.reset();
-        navigate("/bookings");
+        navigate("/bookings/calendar");
       }, 3000);
       
     } catch (error: any) {
@@ -401,7 +517,51 @@ const BookingFlow = () => {
                 >
                   Annulla
                 </Button>
-                <Button type="button" onClick={() => setStep(2)}>
+                <Button 
+                  type="button" 
+                  onClick={() => {
+                    // Valida i campi del passo 1 prima di procedere
+                    const guestName = form.getValues("guest_name");
+                    const guestEmail = form.getValues("guest_email");
+                    const adults = form.getValues("adults");
+                    
+                    let isValid = true;
+                    
+                    if (!guestName || guestName.length < 3) {
+                      form.setError("guest_name", { 
+                        type: "manual", 
+                        message: "Il nome deve contenere almeno 3 caratteri" 
+                      });
+                      isValid = false;
+                    }
+                    
+                    if (!guestEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) {
+                      form.setError("guest_email", { 
+                        type: "manual", 
+                        message: "Inserisci un indirizzo email valido" 
+                      });
+                      isValid = false;
+                    }
+                    
+                    if (!adults || adults < 1 || adults > 6) {
+                      form.setError("adults", { 
+                        type: "manual", 
+                        message: "Il numero di adulti deve essere compreso tra 1 e 6" 
+                      });
+                      isValid = false;
+                    }
+                    
+                    if (isValid) {
+                      setStep(2);
+                    } else {
+                      toast({
+                        title: "Dati incompleti",
+                        description: "Compila correttamente tutti i campi obbligatori",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                >
                   Avanti <ChevronsRight className="ml-2 h-4 w-4" />
                 </Button>
               </CardFooter>
@@ -417,6 +577,13 @@ const BookingFlow = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="bg-blue-50 p-4 rounded-md mb-4">
+                  <p className="text-sm text-blue-800">
+                    <strong>Importante:</strong> Seleziona prima le date di check-in e check-out. 
+                    Verranno mostrate solo le camere disponibili per il periodo selezionato.
+                    La data di check-out deve essere successiva alla data di check-in.
+                  </p>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
@@ -503,33 +670,50 @@ const BookingFlow = () => {
                       <FormLabel>Seleziona camera</FormLabel>
                       <FormControl>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                          {rooms.map((room) => (
-                            <div
-                              key={room.id}
-                              className={`border rounded-lg p-4 cursor-pointer transition-colors ${
-                                selectedRoomId === room.id
-                                  ? "border-primary bg-primary/5"
-                                  : "hover:border-gray-400"
-                              }`}
-                              onClick={() => handleRoomSelect(room.id)}
-                            >
-                              <div className="flex justify-between items-start">
-                                <div>
-                                  <h3 className="font-medium">Camera {room.room_number}</h3>
-                                  <p className="text-sm text-gray-600">{room.room_type}</p>
-                                </div>
-                                {selectedRoomId === room.id && (
-                                  <div className="bg-primary rounded-full p-1">
-                                    <Check className="h-4 w-4 text-white" />
-                                  </div>
-                                )}
-                              </div>
-                              <div className="mt-2 text-right">
-                                <span className="font-bold">€{room.price_per_night}</span>
-                                <span className="text-sm text-gray-600">/notte</span>
-                              </div>
+                          {isCheckingAvailability ? (
+                            <div className="col-span-2 flex justify-center py-8">
+                              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+                              <span className="ml-3">Verifica disponibilità...</span>
                             </div>
-                          ))}
+                          ) : availableRooms.length > 0 ? (
+                            availableRooms.map((room) => (
+                              <div
+                                key={room.id}
+                                className={`border rounded-lg p-4 cursor-pointer transition-colors ${
+                                  selectedRoomId === room.id
+                                    ? "border-primary bg-primary/5"
+                                    : "hover:border-gray-400"
+                                }`}
+                                onClick={() => handleRoomSelect(room.id)}
+                              >
+                                <div className="flex justify-between items-start">
+                                  <div>
+                                    <h3 className="font-medium">Camera {room.room_number}</h3>
+                                    <p className="text-sm text-gray-600">{room.room_type}</p>
+                                    <div className="mt-1">
+                                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                        Disponibile
+                                      </span>
+                                    </div>
+                                  </div>
+                                  {selectedRoomId === room.id && (
+                                    <div className="bg-primary rounded-full p-1">
+                                      <Check className="h-4 w-4 text-white" />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="mt-2 text-right">
+                                  <span className="font-bold">€{room.price_per_night}</span>
+                                  <span className="text-sm text-gray-600">/notte</span>
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="col-span-2 text-center py-8">
+                              <p className="text-gray-500">Nessuna camera disponibile per le date selezionate.</p>
+                              <p className="text-gray-500 mt-2">Prova a selezionare date diverse.</p>
+                            </div>
+                          )}
                         </div>
                       </FormControl>
                       <FormMessage />
@@ -545,7 +729,60 @@ const BookingFlow = () => {
                 >
                   Indietro
                 </Button>
-                <Button type="button" onClick={() => setStep(3)}>
+                <Button 
+                  type="button" 
+                  onClick={() => {
+                    // Valida i campi del passo 2 prima di procedere
+                    const checkIn = form.getValues("check_in");
+                    const checkOut = form.getValues("check_out");
+                    const roomId = form.getValues("room_id");
+                    
+                    let isValid = true;
+                    
+                    if (!checkIn) {
+                      form.setError("check_in", { 
+                        type: "manual", 
+                        message: "Seleziona la data di check-in" 
+                      });
+                      isValid = false;
+                    }
+                    
+                    if (!checkOut) {
+                      form.setError("check_out", { 
+                        type: "manual", 
+                        message: "Seleziona la data di check-out" 
+                      });
+                      isValid = false;
+                    }
+                    
+                    if (checkIn && checkOut && checkOut <= checkIn) {
+                      form.setError("check_out", { 
+                        type: "manual", 
+                        message: "La data di check-out deve essere successiva alla data di check-in" 
+                      });
+                      isValid = false;
+                    }
+                    
+                    if (!roomId) {
+                      form.setError("room_id", { 
+                        type: "manual", 
+                        message: "Seleziona una camera" 
+                      });
+                      isValid = false;
+                    }
+                    
+                    if (isValid) {
+                      setStep(3);
+                    } else {
+                      toast({
+                        title: "Dati incompleti",
+                        description: "Seleziona correttamente le date e una camera disponibile",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                  disabled={isCheckingAvailability || availableRooms.length === 0}
+                >
                   Avanti <ChevronsRight className="ml-2 h-4 w-4" />
                 </Button>
               </CardFooter>

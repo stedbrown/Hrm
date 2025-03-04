@@ -93,8 +93,8 @@ const InvoiceProcessor = ({
   onProcessPayment = () => {},
 }: InvoiceProcessorProps) => {
   const defaultInvoice: Invoice = {
-    id: `INV-${Math.floor(Math.random() * 10000)}`,
-    quoteId: `QT-${Math.floor(Math.random() * 10000)}`,
+    id: `INV-${new Date().getTime().toString().slice(-8)}`,
+    quoteId: `QT-${new Date().getTime().toString().slice(-6)}`,
     customerName: "John Smith",
     customerEmail: "john.smith@example.com",
     customerAddress: "123 Main St, Anytown, AT 12345",

@@ -77,44 +77,70 @@ const HotelDashboard = ({}: HotelDashboardProps) => {
     link: "/notifications"
   });
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        setIsLoading(true);
-        
-        // Carica i dati in parallelo
-        const [statsData, hotelNameData, userProfileData] = await Promise.all([
-          fetchHotelStats(),
-          fetchHotelName(),
-          fetchUserProfile().catch(() => null), // Non bloccare il caricamento se non c'è un utente loggato
-        ]);
-        
-        // Aggiungiamo alcuni dati fittizi di revenue per completezza
-        const enhancedStats = {
-          ...statsData,
-          revenueToday: Math.round(Math.random() * 1000 + 500), // valore casuale tra 500 e 1500
-          revenueTrend: Math.round((Math.random() * 20) - 5), // valore casuale tra -5% e +15%
-        };
-        
-        setStats(enhancedStats);
-        setHotelName(hotelNameData);
-        
-        if (userProfileData) {
-          setUserName(userProfileData.name);
-        }
-      } catch (error) {
-        console.error("Errore durante il caricamento dei dati:", error);
-        toast({
-          title: "Errore",
-          description: "Non è stato possibile caricare i dati. Riprova più tardi.",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoading(false);
+  // Funzione per caricare i dati della dashboard
+  const loadData = async () => {
+    try {
+      console.log("Caricamento dati dashboard...");
+      setIsLoading(true);
+      
+      // Carica i dati in parallelo
+      const [statsData, hotelNameData, userProfileData] = await Promise.all([
+        fetchHotelStats(),
+        fetchHotelName(),
+        fetchUserProfile().catch(() => null), // Non bloccare il caricamento se non c'è un utente loggato
+      ]);
+      
+      console.log("Dati statistiche ricevuti:", statsData);
+      
+      // Utilizziamo solo i dati reali, senza aggiungere dati fittizi
+      setStats({
+        ...statsData,
+        // Per il momento impostiamo questi valori a 0, in futuro si potranno implementare
+        // funzioni per calcolare questi valori in base ai dati reali
+        revenueToday: 0,
+        revenueTrend: 0,
+      });
+      
+      setHotelName(hotelNameData);
+      
+      if (userProfileData) {
+        setUserName(userProfileData.name);
       }
+    } catch (error) {
+      console.error("Errore durante il caricamento dei dati:", error);
+      toast({
+        title: "Errore",
+        description: "Non è stato possibile caricare i dati. Riprova più tardi.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+    
+    // Aggiungi un listener per l'evento 'bookingDeleted'
+    const handleBookingDeleted = () => {
+      console.log("Evento bookingDeleted ricevuto, ricarico i dati della dashboard");
+      loadData();
     };
     
-    loadData();
+    // Aggiungi un listener per l'evento 'forceRefreshDashboard'
+    const handleForceRefresh = () => {
+      console.log("Evento forceRefreshDashboard ricevuto, ricarico i dati della dashboard");
+      loadData();
+    };
+    
+    window.addEventListener('bookingDeleted', handleBookingDeleted);
+    window.addEventListener('forceRefreshDashboard', handleForceRefresh);
+    
+    // Rimuovi i listener quando il componente viene smontato
+    return () => {
+      window.removeEventListener('bookingDeleted', handleBookingDeleted);
+      window.removeEventListener('forceRefreshDashboard', handleForceRefresh);
+    };
   }, [toast]);
 
   const handleCreateBooking = () => {
@@ -280,6 +306,24 @@ const HotelDashboard = ({}: HotelDashboardProps) => {
         </motion.div>
       )}
 
+      <div className="flex justify-end mb-4">
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={() => {
+            loadData();
+            toast({
+              title: "Dati aggiornati",
+              description: "I dati della dashboard sono stati aggiornati",
+            });
+          }}
+          className="flex items-center gap-1"
+        >
+          <ArrowUp className="h-4 w-4 mr-1" />
+          Aggiorna dati
+        </Button>
+      </div>
+
       <Tabs defaultValue={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-2">
           <TabsTrigger value="overview">Panoramica</TabsTrigger>
@@ -292,59 +336,59 @@ const HotelDashboard = ({}: HotelDashboardProps) => {
             <Card className="overflow-hidden transition-all duration-200 hover:shadow-md">
               <div className="h-1 w-full bg-blue-500" />
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
+                <CardTitle className="text-sm font-medium">
                   Tasso di Occupazione
-            </CardTitle>
+                </CardTitle>
                 <Home className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
+              </CardHeader>
+              <CardContent>
                 <div className="text-2xl font-bold">{stats.occupancyRate}%</div>
                 <p className="text-xs text-muted-foreground">
                   Camere occupate / totale
-            </p>
-          </CardContent>
-        </Card>
+                </p>
+              </CardContent>
+            </Card>
             <Card className="overflow-hidden transition-all duration-200 hover:shadow-md">
               <div className="h-1 w-full bg-indigo-500" />
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
+                <CardTitle className="text-sm font-medium">
                   Prenotazioni Totali
-            </CardTitle>
+                </CardTitle>
                 <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
+              </CardHeader>
+              <CardContent>
                 <div className="text-2xl font-bold">{stats.totalBookings}</div>
                 <p className="text-xs text-muted-foreground">
                   Prenotazioni registrate
-            </p>
-          </CardContent>
-        </Card>
+                </p>
+              </CardContent>
+            </Card>
             <Card className="overflow-hidden transition-all duration-200 hover:shadow-md">
               <div className="h-1 w-full bg-green-500" />
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
+                <CardTitle className="text-sm font-medium">
                   Arrivi Oggi
-            </CardTitle>
+                </CardTitle>
                 <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
+              </CardHeader>
+              <CardContent>
                 <div className="text-2xl font-bold">
                   {stats.pendingArrivals}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Ospiti in arrivo oggi
                 </p>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
             <Card className="overflow-hidden transition-all duration-200 hover:shadow-md">
               <div className="h-1 w-full bg-amber-500" />
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
+                <CardTitle className="text-sm font-medium">
                   Ricavi Oggi
-            </CardTitle>
+                </CardTitle>
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
+              </CardHeader>
+              <CardContent>
                 <div className="text-2xl font-bold">
                   €{stats.revenueToday}
                 </div>
@@ -364,15 +408,15 @@ const HotelDashboard = ({}: HotelDashboardProps) => {
                   )}
                   <span className="text-muted-foreground ml-1">rispetto a ieri</span>
                 </div>
-          </CardContent>
-        </Card>
-      </div>
+              </CardContent>
+            </Card>
+          </div>
 
           <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-7">
             <Card className="col-span-1 md:col-span-2 lg:col-span-4 transition-all duration-200 hover:shadow-md">
-                <CardHeader>
+              <CardHeader>
                 <CardTitle>Azioni Rapide</CardTitle>
-                </CardHeader>
+              </CardHeader>
               <CardContent className="space-y-2">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <Button 
@@ -392,7 +436,7 @@ const HotelDashboard = ({}: HotelDashboardProps) => {
                     <Building className="mr-2 h-4 w-4" />
                     Gestisci Camere
                   </Button>
-                  </div>
+                </div>
                 <Button 
                   variant="outline" 
                   className="w-full flex items-center justify-center"
@@ -401,14 +445,14 @@ const HotelDashboard = ({}: HotelDashboardProps) => {
                   <Bell className="mr-2 h-4 w-4" />
                   Invia Notifica
                 </Button>
-                </CardContent>
-              </Card>
+              </CardContent>
+            </Card>
 
             <Card className="col-span-1 md:col-span-2 lg:col-span-3 transition-all duration-200 hover:shadow-md">
-                <CardHeader>
+              <CardHeader>
                 <CardTitle>Promemoria</CardTitle>
-                </CardHeader>
-                <CardContent>
+              </CardHeader>
+              <CardContent>
                 <div className="space-y-3">
                   {stats.pendingArrivals > 0 && (
                     <motion.div 
@@ -446,9 +490,9 @@ const HotelDashboard = ({}: HotelDashboardProps) => {
                       Statistiche mensili disponibili
                     </p>
                   </motion.div>
-                  </div>
-                </CardContent>
-              </Card>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           <Card className="transition-all duration-200 hover:shadow-md">
@@ -471,7 +515,7 @@ const HotelDashboard = ({}: HotelDashboardProps) => {
                     La famiglia Bianchi ha completato il check-in per la Suite 201
                   </p>
                   <p className="text-xs text-gray-400 mt-1">1 ora fa</p>
-                      </div>
+                </div>
                 
                 <div className="border-l-2 border-amber-500 pl-3 pb-3 pt-1">
                   <p className="text-sm font-medium">Richiesta Servizio in Camera</p>
@@ -485,11 +529,11 @@ const HotelDashboard = ({}: HotelDashboardProps) => {
           </Card>
         </TabsContent>
 
-        <TabsContent value="availability">
+        <TabsContent value="availability" className="space-y-4">
           <RoomAvailability />
         </TabsContent>
 
-        <TabsContent value="channels">
+        <TabsContent value="channels" className="space-y-4">
           <ChannelManager />
         </TabsContent>
       </Tabs>

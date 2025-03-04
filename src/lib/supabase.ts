@@ -1,6 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "../types/database";
-import { sampleRooms, sampleBookings, sampleRoomsWithOccupancy, sampleOccupancyOverview } from "../components/booking/DummyData";
 import { addDays, format } from 'date-fns';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "";
@@ -8,38 +7,48 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
-    autoRefreshToken: true,
     persistSession: true,
-    storage: localStorage,
+    autoRefreshToken: true,
   },
 });
 
 export async function fetchRooms() {
   try {
+    console.log("Recupero le camere dal database...");
+    
     const { data, error } = await supabase
       .from("rooms")
       .select("*")
       .order("room_number");
 
-    if (error) throw error;
-    
-    // Se non ci sono dati o ci sono errori, usa i dati di esempio
-    if (!data || data.length === 0) {
-      console.log("Nessun dato di stanza trovato nel database, utilizzo dati di esempio");
-      return sampleRooms;
+    if (error) {
+      console.error("Errore nella query Supabase:", error);
+      throw error;
     }
     
-    return data;
+    console.log(`Camere recuperate dal database: ${data?.length || 0} camere trovate`);
+    
+    // Restituisci sempre un array (vuoto se non ci sono dati)
+    return data || [];
+    
   } catch (error) {
-    console.error("Error fetching rooms:", error);
-    console.log("Errore nel recupero delle stanze, utilizzo dati di esempio");
-    // In caso di errore, ritorna i dati di esempio
-    return sampleRooms;
+    console.error("Errore nel recupero delle camere:", error);
+    
+    // Verifica se l'errore è relativo alla connessione al database
+    if (error instanceof Error) {
+      console.error("Dettagli errore:", error.message);
+    }
+    
+    console.log("Errore nel recupero delle camere, restituisco un array vuoto");
+    // In caso di errore, restituisci un array vuoto
+    return [];
   }
 }
 
 export async function fetchBookings() {
   try {
+    console.log("Tentativo di recuperare le prenotazioni dal database...");
+    
     const { data, error } = await supabase
       .from("bookings")
       .select(
@@ -50,20 +59,28 @@ export async function fetchBookings() {
       )
       .order("created_at", { ascending: false });
 
-    if (error) throw error;
-    
-    // Se non ci sono dati o ci sono errori, usa i dati di esempio
-    if (!data || data.length === 0) {
-      console.log("Nessuna prenotazione trovata nel database, utilizzo dati di esempio");
-      return sampleBookings;
+    if (error) {
+      console.error("Errore nella query Supabase:", error);
+      throw error;
     }
     
-    return data;
+    // Log dei dati recuperati
+    console.log(`Prenotazioni recuperate dal database: ${data?.length || 0} prenotazioni trovate`);
+    
+    // Restituisci sempre un array (vuoto se non ci sono dati)
+    return data || [];
+    
   } catch (error) {
-    console.error("Error fetching bookings:", error);
-    console.log("Errore nel recupero delle prenotazioni, utilizzo dati di esempio");
-    // In caso di errore, ritorna i dati di esempio
-    return sampleBookings;
+    console.error("Errore nel recupero delle prenotazioni:", error);
+    
+    // Verifica se l'errore è relativo alla connessione al database
+    if (error instanceof Error) {
+      console.error("Dettagli errore:", error.message);
+    }
+    
+    console.log("Errore nel recupero delle prenotazioni, restituisco un array vuoto");
+    // In caso di errore, restituisci SEMPRE un array vuoto, MAI dati di esempio
+    return [];
   }
 }
 
@@ -119,11 +136,32 @@ export async function fetchUsers() {
 
 export async function fetchHotelStats() {
   try {
-    // Ottieni statistiche in tempo reale
-    const [rooms, bookings] = await Promise.all([
-      fetchRooms(),
-      fetchBookings(),
-    ]);
+    console.log("Recupero statistiche dell'hotel...");
+    
+    // Forza una nuova richiesta al database per assicurarsi di ottenere dati aggiornati
+    const { data: roomsData, error: roomsError } = await supabase
+      .from("rooms")
+      .select("*");
+      
+    if (roomsError) {
+      console.error("Errore nel recupero delle camere:", roomsError);
+      throw roomsError;
+    }
+    
+    const { data: bookingsData, error: bookingsError } = await supabase
+      .from("bookings")
+      .select("*");
+      
+    if (bookingsError) {
+      console.error("Errore nel recupero delle prenotazioni:", bookingsError);
+      throw bookingsError;
+    }
+    
+    // Utilizza i dati ottenuti direttamente dalla query
+    const rooms = roomsData || [];
+    const bookings = bookingsData || [];
+    
+    console.log(`Statistiche dirette dal DB: ${rooms.length} camere, ${bookings.length} prenotazioni`);
     
     // Calcola le statistiche effettive
     const currentDate = new Date();
@@ -146,16 +184,26 @@ export async function fetchHotelStats() {
       return booking.status === 'confirmed' && checkOutDate.getTime() === currentDate.getTime();
     }).length;
     
-    return {
+    const stats = {
       occupancyRate,
       totalBookings: bookings.length,
       pendingArrivals,
       pendingDepartures,
     };
     
+    console.log("Statistiche calcolate:", stats);
+    
+    return stats;
+    
   } catch (error) {
     console.error("Error fetching hotel stats:", error);
-    throw error;
+    // In caso di errore, restituisci statistiche predefinite con valori a zero
+    return {
+      occupancyRate: 0,
+      totalBookings: 0,
+      pendingArrivals: 0,
+      pendingDepartures: 0,
+    };
   }
 }
 
@@ -204,13 +252,17 @@ export async function fetchUserProfile() {
  */
 export async function fetchRoomsWithOccupancy(startDate?: string, endDate?: string) {
   try {
+    console.log("Recupero camere con occupazione dal database...");
     // Ottieni tutte le camere
     const { data: rooms, error: roomsError } = await supabase
       .from("rooms")
       .select("*")
       .order("room_number");
 
-    if (roomsError) throw roomsError;
+    if (roomsError) {
+      console.error("Errore nel recupero delle camere:", roomsError);
+      throw roomsError;
+    }
 
     // Ottieni tutte le prenotazioni con informazioni delle camere
     const currentDate = new Date().toISOString().split('T')[0];
@@ -234,60 +286,50 @@ export async function fetchRoomsWithOccupancy(startDate?: string, endDate?: stri
         created_at
       `)
       .or(`check_out.gte.${currentDate}`); // Prenotazioni attuali o future
-    
-    // Se sono specificate le date, aggiungi filtri
-    if (startDate && endDate) {
-      query = query.or(
-        `and(check_in.gte.${startDate},check_in.lte.${endDate}),` +
-        `and(check_out.gte.${startDate},check_out.lte.${endDate}),` +
-        `and(check_in.lte.${startDate},check_out.gte.${endDate})`
-      );
-    }
-    
-    const { data: bookings, error: bookingsError } = await query;
-    
-    if (bookingsError) throw bookingsError;
 
-    // Mappa le prenotazioni alle camere corrispondenti
-    const roomsWithOccupancy = rooms?.map(room => {
-      // Trova tutte le prenotazioni per questa camera
+    // Se sono specificate le date, filtra ulteriormente
+    if (startDate) {
+      query = query.or(`check_in.gte.${startDate}`);
+    }
+    if (endDate) {
+      query = query.lt('check_in', endDate);
+    }
+
+    const { data: bookings, error: bookingsError } = await query;
+
+    if (bookingsError) {
+      console.error("Errore nel recupero delle prenotazioni:", bookingsError);
+      throw bookingsError;
+    }
+
+    console.log(`Recuperate ${rooms?.length || 0} camere e ${bookings?.length || 0} prenotazioni`);
+
+    // Restituisci i dati vuoti se non ci sono camere
+    if (!rooms || rooms.length === 0) {
+      console.log("Nessuna camera trovata nel database");
+      return [];
+    }
+
+    // Calcola la disponibilità per ciascuna camera
+    const roomsWithOccupancy = rooms.map(room => {
       const roomBookings = bookings?.filter(booking => booking.room_id === room.id) || [];
-      
-      // Classifica le prenotazioni
-      const currentBooking = roomBookings.find(booking => {
-        const checkIn = new Date(booking.check_in);
-        const checkOut = new Date(booking.check_out);
-        const today = new Date();
-        return checkIn <= today && checkOut >= today;
-      });
-      
-      const futureBookings = roomBookings
-        .filter(booking => new Date(booking.check_in) > new Date())
-        .sort((a, b) => new Date(a.check_in).getTime() - new Date(b.check_in).getTime());
-      
-      // Calcola la disponibilità
-      const availability = calculateRoomAvailability(room, roomBookings);
-      
       return {
         ...room,
-        currentBooking,
-        futureBookings,
-        availability
+        bookings: roomBookings,
+        availability: calculateRoomAvailability(room, roomBookings)
       };
     });
 
-    // Se non ci sono dati o ci sono errori, usa i dati di esempio
-    if (!rooms || rooms.length === 0 || !bookings) {
-      console.log("Nessun dato di occupazione trovato nel database, utilizzo dati di esempio");
-      return sampleRoomsWithOccupancy;
-    }
-
-    return roomsWithOccupancy || [];
+    return roomsWithOccupancy;
   } catch (error) {
-    console.error("Error fetching rooms with occupancy:", error);
-    console.log("Errore nel recupero dell'occupazione, utilizzo dati di esempio");
-    // In caso di errore, ritorna i dati di esempio
-    return sampleRoomsWithOccupancy;
+    console.error("Errore nel recupero delle camere con occupazione:", error);
+    
+    if (error instanceof Error) {
+      console.error("Dettagli errore:", error.message);
+    }
+    
+    // In caso di errore, restituisci un array vuoto
+    return [];
   }
 }
 
@@ -397,12 +439,8 @@ function calculateRoomAvailability(room: any, bookings: any[]) {
  */
 export async function fetchOccupancyOverview(startDate?: string, endDate?: string) {
   try {
+    console.log("Recupero panoramica occupazione...");
     const roomsWithOccupancy = await fetchRoomsWithOccupancy(startDate, endDate);
-    
-    // Se stiamo usando i dati di esempio, ritorna direttamente l'overview di esempio
-    if (roomsWithOccupancy === sampleRoomsWithOccupancy) {
-      return sampleOccupancyOverview;
-    }
     
     // Se non sono specificate le date, usa il mese corrente
     if (!startDate || !endDate) {
@@ -438,93 +476,81 @@ export async function fetchOccupancyOverview(startDate?: string, endDate?: strin
       };
     });
     
-    // Calcola statistiche di occupazione complessive
-    const averageOccupancy = dailyOccupancy.reduce((sum, day) => sum + day.occupancyRate, 0) / dailyOccupancy.length;
+    // Calcola le statistiche mensili
+    const totalDays = dailyOccupancy.length;
+    const totalOccupiedRoomDays = dailyOccupancy.reduce((sum, day) => sum + day.occupiedRooms, 0);
+    const totalPossibleRoomDays = dailyOccupancy.reduce((sum, day) => sum + day.totalRooms, 0);
     
-    // Identifica le camere più e meno prenotate
-    const roomOccupancyCount = roomsWithOccupancy.map(room => {
-      const bookedDays = room.availability.filter(a => a.status === 'booked').length;
-      return {
-        id: room.id,
-        roomNumber: room.room_number,
-        roomType: room.room_type,
-        bookedDays,
-        occupancyRate: Math.round((bookedDays / dates.length) * 100)
-      };
-    });
-    
-    roomOccupancyCount.sort((a, b) => b.occupancyRate - a.occupancyRate);
+    const monthlyStats = {
+      averageOccupancyRate: totalPossibleRoomDays > 0 
+        ? Math.round((totalOccupiedRoomDays / totalPossibleRoomDays) * 100)
+        : 0,
+      peakDay: [...dailyOccupancy].sort((a, b) => b.occupancyRate - a.occupancyRate)[0],
+      lowestDay: [...dailyOccupancy].sort((a, b) => a.occupancyRate - b.occupancyRate)[0],
+    };
     
     return {
-      period: {
-        startDate,
-        endDate,
-        totalDays: dates.length
-      },
+      startDate,
+      endDate,
       dailyOccupancy,
-      statistics: {
-        averageOccupancy: Math.round(averageOccupancy),
-        mostBookedRooms: roomOccupancyCount.slice(0, 5),
-        leastBookedRooms: roomOccupancyCount.slice(-5).reverse()
-      }
+      monthlyStats
     };
   } catch (error) {
-    console.error("Error fetching occupancy overview:", error);
-    console.log("Errore nel recupero della panoramica di occupazione, utilizzo dati di esempio");
-    // In caso di errore, ritorna i dati di esempio
-    return sampleOccupancyOverview;
+    console.error("Errore nel recupero della panoramica di occupazione:", error);
+    
+    if (error instanceof Error) {
+      console.error("Dettagli errore:", error.message);
+    }
+    
+    // In caso di errore, restituisci dei dati vuoti
+    return {
+      startDate: startDate || '',
+      endDate: endDate || '',
+      dailyOccupancy: [],
+      monthlyStats: {
+        averageOccupancyRate: 0,
+        peakDay: null,
+        lowestDay: null
+      }
+    };
   }
 }
 
 // Funzione per recuperare una prenotazione specifica per ID
 export const fetchBookingById = async (bookingId: string) => {
-  // Se l'ID è 'create', stiamo probabilmente in una pagina di creazione
-  // quindi restituiamo null invece di tentare di recuperare una prenotazione
-  if (bookingId === 'create') {
-    return null;
-  }
-  
   try {
+    console.log(`Tentativo di recuperare la prenotazione con ID: ${bookingId}`);
+
     const { data, error } = await supabase
       .from('bookings')
       .select(`
         *,
-        rooms:room_id (
-          id,
-          room_number,
-          room_type,
-          capacity,
-          price_per_night,
-          status,
-          amenities,
-          description
-        )
+        rooms:room_id(room_number, room_type)
       `)
       .eq('id', bookingId)
       .single();
 
     if (error) {
-      // Log più dettagliato per capire meglio l'errore
-      console.log(`Prenotazione non trovata con ID: ${bookingId}. Utilizzo dati di esempio.`);
-      // Non mostriamo l'errore completo nella console per evitare rumore
-      // Fallback ai dati di esempio
-      const sampleBooking = sampleBookings.find(b => b.id === bookingId);
-      return sampleBooking || null;
+      // Se l'errore è "not found", restituisci null invece di lanciare un errore
+      if (error.code === 'PGRST116') {
+        console.log(`Prenotazione con ID ${bookingId} non trovata`);
+        return null;
+      }
+      console.error(`Errore nel recupero della prenotazione con ID ${bookingId}:`, error);
+      throw error;
     }
 
-    // Se non ci sono dati, verificare nei dati di esempio
-    if (!data) {
-      console.log(`Nessun dato trovato per la prenotazione con ID: ${bookingId}. Utilizzo dati di esempio.`);
-      const sampleBooking = sampleBookings.find(b => b.id === bookingId);
-      return sampleBooking || null;
-    }
-
+    console.log(`Prenotazione con ID ${bookingId} recuperata:`, data);
     return data;
   } catch (error) {
-    console.log(`Errore nel recupero della prenotazione con ID: ${bookingId}. Utilizzo dati di esempio.`);
-    // Fallback ai dati di esempio
-    const sampleBooking = sampleBookings.find(b => b.id === bookingId);
-    return sampleBooking || null;
+    console.error(`Errore durante il recupero della prenotazione:`, error);
+    
+    if (error instanceof Error) {
+      console.error("Dettagli errore:", error.message);
+    }
+    
+    // Se c'è un errore, restituisci null (prenotazione non trovata)
+    return null;
   }
 };
 
@@ -588,6 +614,26 @@ export async function isRoomAvailable(roomId: string, checkIn: Date, checkOut: D
     const checkInStr = format(checkIn, 'yyyy-MM-dd');
     const checkOutStr = format(checkOut, 'yyyy-MM-dd');
     
+    console.log(`Verifica disponibilità camera ${roomId} dal ${checkInStr} al ${checkOutStr}`);
+    
+    // Prima verifichiamo lo stato attuale della camera
+    const { data: roomData, error: roomError } = await supabase
+      .from('rooms')
+      .select('status')
+      .eq('id', roomId)
+      .single();
+      
+    if (roomError) {
+      console.error("Errore nel recupero dello stato della camera:", roomError);
+      throw roomError;
+    }
+    
+    // Se la camera non è disponibile (es. in manutenzione), non è prenotabile
+    if (roomData && roomData.status !== 'available' && roomData.status !== 'reserved') {
+      console.log(`Camera ${roomId} non disponibile, stato attuale: ${roomData.status}`);
+      return false;
+    }
+    
     // Recupera tutte le prenotazioni esistenti per questa camera
     const { data: bookings, error } = await supabase
       .from('bookings')
@@ -595,12 +641,18 @@ export async function isRoomAvailable(roomId: string, checkIn: Date, checkOut: D
       .eq('room_id', roomId)
       .or(`status.eq.confirmed,status.eq.pending,status.eq.checked_in`);
       
-    if (error) throw error;
+    if (error) {
+      console.error("Errore nel recupero delle prenotazioni:", error);
+      throw error;
+    }
     
     // Se non ci sono prenotazioni, la camera è disponibile
     if (!bookings || bookings.length === 0) {
+      console.log(`Nessuna prenotazione trovata per la camera ${roomId}, è disponibile`);
       return true;
     }
+    
+    console.log(`Trovate ${bookings.length} prenotazioni per la camera ${roomId}`);
     
     // Verifica che non ci siano sovrapposizioni con prenotazioni esistenti
     const hasOverlap = bookings.some(booking => {
@@ -610,13 +662,85 @@ export async function isRoomAvailable(roomId: string, checkIn: Date, checkOut: D
       // Una prenotazione si sovrappone se:
       // 1. Il check-in richiesto è prima del check-out esistente E
       // 2. Il check-out richiesto è dopo il check-in esistente
-      return checkInStr < bookingCheckOut && checkOutStr > bookingCheckIn;
+      const overlap = checkInStr < bookingCheckOut && checkOutStr > bookingCheckIn;
+      
+      if (overlap) {
+        console.log(`Sovrapposizione trovata con prenotazione esistente: ${bookingCheckIn} - ${bookingCheckOut}`);
+      }
+      
+      return overlap;
     });
     
     // La camera è disponibile se non ci sono sovrapposizioni
-    return !hasOverlap;
+    const isAvailable = !hasOverlap;
+    console.log(`Camera ${roomId} disponibile: ${isAvailable}`);
+    return isAvailable;
   } catch (error) {
     console.error("Errore nel controllo disponibilità camera:", error);
     throw error;
   }
 }
+
+// Funzione per eliminare una prenotazione dal database
+export const deleteBooking = async (bookingId: string) => {
+  try {
+    console.log(`Tentativo di eliminare la prenotazione con ID: ${bookingId}`);
+    
+    // Prima recuperiamo la prenotazione per ottenere il room_id
+    const booking = await fetchBookingById(bookingId);
+    
+    if (!booking) {
+      console.error(`Prenotazione con ID ${bookingId} non trovata`);
+      throw new Error("Prenotazione non trovata");
+    }
+    
+    // Elimina la prenotazione dal database
+    const { error } = await supabase
+      .from('bookings')
+      .delete()
+      .eq('id', bookingId);
+    
+    if (error) {
+      console.error(`Errore nell'eliminazione della prenotazione con ID ${bookingId}:`, error);
+      throw error;
+    }
+    
+    console.log(`Prenotazione con ID ${bookingId} eliminata con successo`);
+    
+    // Se la camera era riservata per questa prenotazione, aggiorna lo stato a "available"
+    if (booking.room_id) {
+      // Verifica se non ci sono altre prenotazioni attive per questa camera
+      const { data: otherBookings, error: checkError } = await supabase
+        .from('bookings')
+        .select('id')
+        .eq('room_id', booking.room_id)
+        .in('status', ['confirmed', 'checked_in', 'pending'])
+        .neq('id', bookingId);
+      
+      if (checkError) {
+        console.error(`Errore nella verifica di altre prenotazioni per la camera:`, checkError);
+      } else if (!otherBookings || otherBookings.length === 0) {
+        // Se non ci sono altre prenotazioni attive, imposta la camera come disponibile
+        const { error: roomError } = await supabase
+          .from('rooms')
+          .update({ status: 'available' })
+          .eq('id', booking.room_id);
+        
+        if (roomError) {
+          console.error(`Errore nell'aggiornamento dello stato della camera:`, roomError);
+        } else {
+          console.log(`Stato della camera ${booking.room_id} aggiornato a "available"`);
+        }
+      }
+    }
+    
+    // Emetti un evento personalizzato per notificare che una prenotazione è stata eliminata
+    const event = new CustomEvent('bookingDeleted', { detail: { bookingId } });
+    window.dispatchEvent(event);
+    
+    return true;
+  } catch (error) {
+    console.error(`Errore nell'eliminazione della prenotazione:`, error);
+    throw error;
+  }
+};

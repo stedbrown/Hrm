@@ -21,60 +21,75 @@ import {
   Utensils,
   Car,
   Wifi,
-  Tv
+  Tv,
+  Trash2
 } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
 import { it } from "date-fns/locale";
 import { useToast } from "../ui/use-toast";
 import { Skeleton } from "../ui/skeleton";
-import { fetchBookingById, updateBookingStatus } from "@/lib/supabase";
-import { sampleBookings } from "./DummyData";
+import { fetchBookingById, updateBookingStatus, deleteBooking } from "@/lib/supabase";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const BookingDetails = () => {
   const { id } = useParams<{ id: string }>();
   const [booking, setBooking] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("details");
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   useEffect(() => {
-    if (id) {
-      loadBookingData(id);
-    }
-  }, [id]);
-
-  const loadBookingData = async (bookingId: string) => {
-    try {
-      setIsLoading(true);
-      const data = await fetchBookingById(bookingId);
-      if (data) {
-        setBooking(data);
-      } else {
-        // Fallback ai dati di esempio se non è stato trovato nulla
-        const sampleBooking = sampleBookings.find(b => b.id === bookingId);
-        if (sampleBooking) {
-          setBooking(sampleBooking);
-        } else {
-          toast({
-            title: "Errore",
-            description: "Prenotazione non trovata",
-            variant: "destructive",
-          });
-          navigate("/bookings");
+    const loadBooking = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        
+        if (!id) {
+          setError("ID prenotazione mancante");
+          return;
         }
+        
+        console.log(`Caricamento prenotazione con ID: ${id}`);
+        const bookingData = await fetchBookingById(id);
+        
+        if (!bookingData) {
+          console.error(`Prenotazione con ID ${id} non trovata`);
+          setError("Prenotazione non trovata");
+          return;
+        }
+        
+        console.log("Dati prenotazione caricati:", bookingData);
+        setBooking(bookingData);
+      } catch (error: any) {
+        console.error("Errore nel caricamento della prenotazione:", error);
+        setError(error.message || "Errore nel caricamento della prenotazione");
+        
+        toast({
+          title: "Errore",
+          description: "Non è stato possibile caricare i dettagli della prenotazione",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      console.error("Errore nel caricamento dei dati della prenotazione:", error);
-      toast({
-        title: "Errore",
-        description: "Impossibile caricare i dettagli della prenotazione",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    };
+
+    loadBooking();
+  }, [id, toast]);
 
   const handleStatusChange = async (newStatus: string) => {
     if (!id) return;
@@ -160,6 +175,40 @@ const BookingDetails = () => {
     }
   };
 
+  const handleDeleteBooking = async () => {
+    if (!id) return;
+    
+    try {
+      setIsDeleting(true);
+      await deleteBooking(id);
+      
+      toast({
+        title: "Prenotazione eliminata",
+        description: "La prenotazione è stata eliminata con successo",
+      });
+      
+      // Ricarica la pagina dopo un breve ritardo per aggiornare completamente la dashboard
+      setTimeout(() => {
+        // Utilizzare un evento personalizzato che può essere intercettato in qualsiasi punto dell'app
+        const event = new CustomEvent('forceRefreshDashboard');
+        window.dispatchEvent(event);
+      }, 300);
+      
+      // Reindirizza alla lista delle prenotazioni
+      navigate("/bookings");
+    } catch (error) {
+      console.error("Errore nell'eliminazione della prenotazione:", error);
+      toast({
+        title: "Errore",
+        description: "Impossibile eliminare la prenotazione",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteDialog(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -192,12 +241,12 @@ const BookingDetails = () => {
     );
   }
 
-  if (!booking) {
+  if (error || !booking) {
     return (
       <div className="text-center p-8">
         <h2 className="text-2xl font-bold mb-4">Prenotazione non trovata</h2>
         <p className="text-gray-500 mb-6">
-          La prenotazione che stai cercando non esiste o è stata eliminata.
+          {error || "La prenotazione che stai cercando non esiste o è stata eliminata."}
         </p>
         <Button onClick={() => navigate("/bookings")}>
           Torna alla lista prenotazioni
@@ -254,6 +303,36 @@ const BookingDetails = () => {
               Cancella
             </Button>
           )}
+          
+          <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+            <AlertDialogTrigger asChild>
+              <Button 
+                variant="outline" 
+                className="bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Elimina
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Sei sicuro di voler eliminare questa prenotazione?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Questa azione non può essere annullata. La prenotazione verrà eliminata definitivamente dal database.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Annulla</AlertDialogCancel>
+                <AlertDialogAction 
+                  onClick={handleDeleteBooking}
+                  className="bg-red-600 text-white hover:bg-red-700"
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? "Eliminazione in corso..." : "Elimina"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
 
@@ -456,21 +535,14 @@ const BookingDetails = () => {
               <div>
                 <h3 className="text-lg font-medium mb-4">Storico Prenotazioni</h3>
                 <p className="text-sm text-gray-500 mb-2">
-                  {/* Messaggio condizionale basato sulla storia prenotativa */}
-                  {Math.random() > 0.5 ? (
-                    "L'ospite ha soggiornato presso di noi in precedenza"
-                  ) : (
-                    "Prima volta che l'ospite soggiorna presso di noi"
-                  )}
+                  {/* Questa funzionalità sarà implementata in futuro per mostrare lo storico delle prenotazioni dell'ospite */}
+                  Funzionalità in fase di sviluppo
                 </p>
                 
-                {/* Qui potresti visualizzare lo storico delle prenotazioni precedenti */}
-                {Math.random() > 0.5 && (
-                  <div className="bg-gray-50 p-3 rounded-lg">
-                    <p className="text-sm font-medium">Ultimo soggiorno: Maggio 2023</p>
-                    <p className="text-sm text-gray-500">Camera Deluxe - 3 notti</p>
-                  </div>
-                )}
+                {/* Qui verrà visualizzato lo storico delle prenotazioni precedenti */}
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <p className="text-sm">Lo storico delle prenotazioni dell'ospite sarà disponibile in una versione futura.</p>
+                </div>
               </div>
               
               <Separator />
