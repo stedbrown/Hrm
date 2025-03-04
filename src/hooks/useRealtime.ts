@@ -20,7 +20,7 @@ export function useRealtime(subscriptions: RealtimeSubscription[]) {
     // Add all subscriptions to the channel
     subscriptions.forEach((sub) => {
       newChannel.on(
-        "postgres_changes",
+        "postgres_changes" as any,
         {
           event: sub.event || "*",
           schema: sub.schema || "public",

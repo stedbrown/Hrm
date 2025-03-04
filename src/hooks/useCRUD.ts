@@ -57,8 +57,11 @@ export function useCRUD<T extends Record<string, any>>(tableName: string) {
 
       const { data, error } = await queryBuilder;
 
-      if (error) throw error;
-      return data as T[];
+      if (error) {
+        console.error(`Error fetching ${tableName}:`, error);
+        return [];
+      }
+      return data as unknown as T[];
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       setError(error);

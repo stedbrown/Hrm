@@ -10,13 +10,31 @@ export function useSupabaseQuery<T>(tableName: string, query?: any) {
     const fetchData = async () => {
       try {
         setLoading(true);
-        // Mock data for development without Supabase connection
-        const mockData = [];
-        const error = null;
-        const data = mockData;
-
+        
+        let queryBuilder = supabase.from(tableName).select(query?.select || "*");
+        
+        if (query?.filter) {
+          Object.entries(query.filter).forEach(([key, value]) => {
+            if (value !== undefined && value !== null) {
+              queryBuilder = queryBuilder.eq(key, value);
+            }
+          });
+        }
+        
+        if (query?.order) {
+          queryBuilder = queryBuilder.order(query.order.column, {
+            ascending: query.order.ascending,
+          });
+        }
+        
+        if (query?.limit) {
+          queryBuilder = queryBuilder.limit(query.limit);
+        }
+        
+        const { data: result, error } = await queryBuilder;
+        
         if (error) throw error;
-        setData(data);
+        setData(result as T[]);
       } catch (err) {
         setError(err instanceof Error ? err : new Error(String(err)));
       } finally {
@@ -37,13 +55,11 @@ export function useSupabaseMutation<T>(tableName: string) {
   const insert = async (record: any) => {
     try {
       setLoading(true);
-      // Mock insert for development without Supabase connection
-      // const { data, error } = await supabase
-      //   .from(tableName)
-      //   .insert(record)
-      //   .select();
-      const data = [{ id: "mock-id", ...record }];
-      const error = null;
+      const { data, error } = await supabase
+        .from(tableName)
+        .insert(record)
+        .select();
+      
       if (error) throw error;
       return data as T[];
     } catch (err) {
@@ -57,14 +73,12 @@ export function useSupabaseMutation<T>(tableName: string) {
   const update = async (id: string, updates: any) => {
     try {
       setLoading(true);
-      // Mock update for development without Supabase connection
-      // const { data, error } = await supabase
-      //   .from(tableName)
-      //   .update(updates)
-      //   .eq("id", id)
-      //   .select();
-      const data = [{ id, ...updates }];
-      const error = null;
+      const { data, error } = await supabase
+        .from(tableName)
+        .update(updates)
+        .eq("id", id)
+        .select();
+      
       if (error) throw error;
       return data as T[];
     } catch (err) {
@@ -78,9 +92,8 @@ export function useSupabaseMutation<T>(tableName: string) {
   const remove = async (id: string) => {
     try {
       setLoading(true);
-      // Mock delete for development without Supabase connection
-      // const { error } = await supabase.from(tableName).delete().eq("id", id);
-      const error = null;
+      const { error } = await supabase.from(tableName).delete().eq("id", id);
+      
       if (error) throw error;
       return true;
     } catch (err) {

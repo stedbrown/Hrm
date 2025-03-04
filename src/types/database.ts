@@ -56,6 +56,7 @@ export interface Database {
           price_per_night: number;
           status: string;
           amenities: string[];
+          description?: string;
         };
         Insert: {
           id?: string;
@@ -65,6 +66,7 @@ export interface Database {
           price_per_night: number;
           status?: string;
           amenities?: string[];
+          description?: string;
         };
         Update: {
           id?: string;
@@ -74,6 +76,7 @@ export interface Database {
           price_per_night?: number;
           status?: string;
           amenities?: string[];
+          description?: string;
         };
       };
       restaurant_menu: {

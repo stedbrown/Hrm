@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Button } from "../ui/button";
@@ -8,274 +8,578 @@ import {
   Users,
   Building,
   Plus,
+  Bell,
+  X,
+  ArrowUp,
+  ArrowDown,
+  Loader2,
+  CheckCircle,
+  Home,
+  DollarSign,
+  AlertCircle,
 } from "lucide-react";
 import RoomAvailability from "../booking/RoomAvailability";
 import ChannelManager from "../channel/ChannelManager";
+import { useNotifications } from "../notifications/NotificationsProvider";
+import { useNavigate } from "react-router-dom";
+import { fetchHotelStats, fetchHotelName, fetchUserProfile } from "@/lib/supabase";
+import { useToast } from "../ui/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog";
+import { Input } from "../ui/input";
+import { Label } from "../ui/label";
+import { Textarea } from "../ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
+import { Skeleton } from "../ui/skeleton";
+import { motion } from "framer-motion";
+import RoomOccupancyMap from "../booking/RoomOccupancyMap";
+import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 
-interface HotelDashboardProps {
-  userName?: string;
-  hotelName?: string;
-  stats?: {
-    occupancyRate: number;
-    totalBookings: number;
-    pendingArrivals: number;
-    pendingDepartures: number;
-  };
-}
+interface HotelDashboardProps {}
 
-const HotelDashboard = ({
-  userName = "John Doe",
-  hotelName = "Grand Hotel",
-  stats = {
-    occupancyRate: 78,
-    totalBookings: 156,
-    pendingArrivals: 12,
-    pendingDepartures: 8,
-  },
-}: HotelDashboardProps) => {
+const HotelDashboard = ({}: HotelDashboardProps) => {
   const [activeTab, setActiveTab] = useState<string>("overview");
+  const { addNotification } = useNotifications();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+
+  const [userName, setUserName] = useState<string>("");
+  const [hotelName, setHotelName] = useState<string>("");
+  const [stats, setStats] = useState({
+    occupancyRate: 0,
+    totalBookings: 0,
+    pendingArrivals: 0,
+    pendingDepartures: 0,
+    revenueToday: 0,
+    revenueTrend: 0, // percentuale di cambiamento rispetto a ieri
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  
+  // Stato per il modale di notifica
+  const [notificationDialogOpen, setNotificationDialogOpen] = useState(false);
+  const [notificationForm, setNotificationForm] = useState({
+    title: "",
+    message: "",
+    type: "info" as "info" | "warning" | "success" | "error",
+    link: "/notifications"
+  });
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setIsLoading(true);
+        
+        // Carica i dati in parallelo
+        const [statsData, hotelNameData, userProfileData] = await Promise.all([
+          fetchHotelStats(),
+          fetchHotelName(),
+          fetchUserProfile().catch(() => null), // Non bloccare il caricamento se non c'è un utente loggato
+        ]);
+        
+        // Aggiungiamo alcuni dati fittizi di revenue per completezza
+        const enhancedStats = {
+          ...statsData,
+          revenueToday: Math.round(Math.random() * 1000 + 500), // valore casuale tra 500 e 1500
+          revenueTrend: Math.round((Math.random() * 20) - 5), // valore casuale tra -5% e +15%
+        };
+        
+        setStats(enhancedStats);
+        setHotelName(hotelNameData);
+        
+        if (userProfileData) {
+          setUserName(userProfileData.name);
+        }
+      } catch (error) {
+        console.error("Errore durante il caricamento dei dati:", error);
+        toast({
+          title: "Errore",
+          description: "Non è stato possibile caricare i dati. Riprova più tardi.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadData();
+  }, [toast]);
 
   const handleCreateBooking = () => {
-    // Placeholder for booking creation functionality
-    console.log("Create new booking");
+    navigate("/bookings/create");
   };
 
+  // Funzione per creare una notifica di test
+  const createTestNotification = (type: "info" | "warning" | "success" | "error") => {
+    const titles = {
+      info: "Nuova informazione",
+      warning: "Attenzione",
+      success: "Operazione completata",
+      error: "Errore",
+    };
+    
+    const messages = {
+      info: "È disponibile un nuovo aggiornamento del sistema.",
+      warning: "Ci sono prenotazioni in attesa di conferma.",
+      success: "Check-in completato con successo.",
+      error: "Si è verificato un errore durante il processo di pagamento.",
+    };
+    
+    addNotification({
+      title: titles[type],
+      message: messages[type],
+      type,
+      link: "/notifications",
+    });
+  };
+
+  // Gestori di eventi per il form di notifica
+  const handleOpenNotificationDialog = () => {
+    setNotificationDialogOpen(true);
+  };
+
+  const handleCloseNotificationDialog = () => {
+    setNotificationDialogOpen(false);
+  };
+
+  const handleNotificationChange = (field: keyof typeof notificationForm) => (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    setNotificationForm({
+      ...notificationForm,
+      [field]: e.target.value,
+    });
+  };
+
+  const handleTypeChange = (value: string) => {
+    setNotificationForm({
+      ...notificationForm,
+      type: value as "info" | "warning" | "success" | "error",
+    });
+  };
+
+  const handleSubmitNotification = () => {
+    if (!notificationForm.title || !notificationForm.message) {
+      toast({
+        title: "Errore",
+        description: "Titolo e messaggio sono obbligatori",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    addNotification({
+      title: notificationForm.title,
+      message: notificationForm.message,
+      type: notificationForm.type,
+      link: notificationForm.link || "/notifications",
+    });
+
+    // Mostra messaggio di successo
+    setSuccessMessage("Notifica inviata con successo!");
+    setTimeout(() => setSuccessMessage(null), 3000);
+
+    toast({
+      title: "Notifica Inviata",
+      description: "La notifica è stata inviata con successo",
+      variant: "default",
+    });
+
+    // Reset del form e chiusura del modale
+    setNotificationForm({
+      title: "",
+      message: "",
+      type: "info",
+      link: "/notifications"
+    });
+    handleCloseNotificationDialog();
+  };
+
+  if (isLoading) {
   return (
-    <div className="w-full h-full bg-gray-50 p-6 overflow-auto">
-      {/* Dashboard Header */}
-      <div className="flex justify-between items-center mb-6">
+      <div className="space-y-8">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
-            Welcome back, {userName}
-          </h1>
-          <p className="text-gray-500">
-            Here's what's happening at {hotelName} today
-          </p>
+          <Skeleton className="h-10 w-80 mb-2" />
+          <Skeleton className="h-4 w-60" />
         </div>
-        <Button onClick={handleCreateBooking}>
-          <Plus className="mr-2 h-4 w-4" /> New Booking
-        </Button>
-      </div>
-
-      {/* Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              Occupancy Rate
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.occupancyRate}%</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              +2% from yesterday
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total Bookings
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.totalBookings}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              For the current month
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              Pending Arrivals
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.pendingArrivals}</div>
-            <p className="text-xs text-muted-foreground mt-1">Today</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              Pending Departures
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.pendingDepartures}</div>
-            <p className="text-xs text-muted-foreground mt-1">Today</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Main Dashboard Content */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 mb-8">
-          <TabsTrigger value="overview" className="text-base">
-            <CalendarIcon className="mr-2 h-4 w-4" />
-            Overview
-          </TabsTrigger>
-          <TabsTrigger value="rooms" className="text-base">
-            <Building className="mr-2 h-4 w-4" />
-            Room Management
-          </TabsTrigger>
-          <TabsTrigger value="channels" className="text-base">
-            <BarChart className="mr-2 h-4 w-4" />
-            Channel Manager
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Overview Tab */}
-        <TabsContent value="overview" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2">
-              <Card className="h-full">
-                <CardHeader>
-                  <CardTitle>Booking Calendar</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[400px] flex items-center justify-center bg-gray-100 rounded-md">
-                    <p className="text-gray-500">
-                      Booking calendar will be displayed here
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-            <div>
-              <Card className="h-full">
-                <CardHeader>
-                  <CardTitle>Today's Activity</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="border-l-4 border-blue-500 pl-4 py-2">
-                      <p className="text-sm font-medium">Check-ins</p>
-                      <div className="flex items-center mt-1">
-                        <Users className="h-4 w-4 mr-2 text-blue-500" />
-                        <span className="text-2xl font-bold">12</span>
-                      </div>
-                    </div>
-                    <div className="border-l-4 border-green-500 pl-4 py-2">
-                      <p className="text-sm font-medium">Check-outs</p>
-                      <div className="flex items-center mt-1">
-                        <Users className="h-4 w-4 mr-2 text-green-500" />
-                        <span className="text-2xl font-bold">8</span>
-                      </div>
-                    </div>
-                    <div className="border-l-4 border-purple-500 pl-4 py-2">
-                      <p className="text-sm font-medium">New Bookings</p>
-                      <div className="flex items-center mt-1">
-                        <CalendarIcon className="h-4 w-4 mr-2 text-purple-500" />
-                        <span className="text-2xl font-bold">5</span>
-                      </div>
-                    </div>
-                    <div className="border-l-4 border-amber-500 pl-4 py-2">
-                      <p className="text-sm font-medium">
-                        Pending Confirmations
-                      </p>
-                      <div className="flex items-center mt-1">
-                        <CalendarIcon className="h-4 w-4 mr-2 text-amber-500" />
-                        <span className="text-2xl font-bold">3</span>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-
-          <Card>
+        
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="pb-2">
+                <Skeleton className="h-4 w-28" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-16 mb-1" />
+                <Skeleton className="h-4 w-32" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        
+        <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-7">
+          <Card className="col-span-1 md:col-span-2 lg:col-span-4">
             <CardHeader>
-              <CardTitle>Recent Bookings</CardTitle>
+              <Skeleton className="h-5 w-32" />
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Skeleton className="h-10 w-48" />
+              <Skeleton className="h-10 w-48" />
+            </CardContent>
+          </Card>
+          
+          <Card className="col-span-1 md:col-span-2 lg:col-span-3">
+            <CardHeader>
+              <Skeleton className="h-5 w-32" />
             </CardHeader>
             <CardContent>
-              <div className="rounded-md border">
-                <div className="grid grid-cols-5 bg-muted/50 p-3 text-sm font-medium">
-                  <div>Guest</div>
-                  <div>Room</div>
-                  <div>Check In</div>
-                  <div>Check Out</div>
-                  <div>Status</div>
+              <div className="space-y-3">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-full" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <h2 className="text-3xl font-bold tracking-tight">
+          Benvenuto{userName ? `, ${userName}` : ""}
+        </h2>
+        <p className="text-muted-foreground">
+          Dashboard di gestione per {hotelName}
+        </p>
+      </div>
+
+      {successMessage && (
+        <motion.div 
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0 }}
+          className="bg-green-50 border border-green-200 text-green-800 rounded-md p-4 flex items-center"
+        >
+          <CheckCircle className="h-5 w-5 mr-2" />
+          {successMessage}
+        </motion.div>
+      )}
+
+      <Tabs defaultValue={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="mb-2">
+          <TabsTrigger value="overview">Panoramica</TabsTrigger>
+          <TabsTrigger value="availability">Disponibilità</TabsTrigger>
+          <TabsTrigger value="channels">Canali</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-6">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Card className="overflow-hidden transition-all duration-200 hover:shadow-md">
+              <div className="h-1 w-full bg-blue-500" />
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+                  Tasso di Occupazione
+            </CardTitle>
+                <Home className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+                <div className="text-2xl font-bold">{stats.occupancyRate}%</div>
+                <p className="text-xs text-muted-foreground">
+                  Camere occupate / totale
+            </p>
+          </CardContent>
+        </Card>
+            <Card className="overflow-hidden transition-all duration-200 hover:shadow-md">
+              <div className="h-1 w-full bg-indigo-500" />
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+                  Prenotazioni Totali
+            </CardTitle>
+                <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+                <div className="text-2xl font-bold">{stats.totalBookings}</div>
+                <p className="text-xs text-muted-foreground">
+                  Prenotazioni registrate
+            </p>
+          </CardContent>
+        </Card>
+            <Card className="overflow-hidden transition-all duration-200 hover:shadow-md">
+              <div className="h-1 w-full bg-green-500" />
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+                  Arrivi Oggi
+            </CardTitle>
+                <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+                <div className="text-2xl font-bold">
+                  {stats.pendingArrivals}
                 </div>
-                <div className="divide-y">
-                  {[
-                    {
-                      guest: "John Smith",
-                      room: "101 - Deluxe King",
-                      checkIn: "2023-06-15",
-                      checkOut: "2023-06-18",
-                      status: "Confirmed",
-                    },
-                    {
-                      guest: "Sarah Johnson",
-                      room: "205 - Suite",
-                      checkIn: "2023-06-20",
-                      checkOut: "2023-06-25",
-                      status: "Pending",
-                    },
-                    {
-                      guest: "Michael Brown",
-                      room: "103 - Standard Double",
-                      checkIn: "2023-06-10",
-                      checkOut: "2023-06-12",
-                      status: "Checked Out",
-                    },
-                    {
-                      guest: "Emma Wilson",
-                      room: "302 - Deluxe Twin",
-                      checkIn: "2023-07-01",
-                      checkOut: "2023-07-05",
-                      status: "Confirmed",
-                    },
-                    {
-                      guest: "David Lee",
-                      room: "401 - Junior Suite",
-                      checkIn: "2023-06-28",
-                      checkOut: "2023-07-02",
-                      status: "Pending",
-                    },
-                  ].map((booking, i) => (
-                    <div
-                      key={i}
-                      className="grid grid-cols-5 p-3 text-sm items-center"
+                <p className="text-xs text-muted-foreground">
+                  Ospiti in arrivo oggi
+                </p>
+          </CardContent>
+        </Card>
+            <Card className="overflow-hidden transition-all duration-200 hover:shadow-md">
+              <div className="h-1 w-full bg-amber-500" />
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+                  Ricavi Oggi
+            </CardTitle>
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+                <div className="text-2xl font-bold">
+                  €{stats.revenueToday}
+                </div>
+                <div className="flex items-center text-xs">
+                  {stats.revenueTrend > 0 ? (
+                    <>
+                      <ArrowUp className="h-3 w-3 mr-1 text-green-500" />
+                      <span className="text-green-500">+{stats.revenueTrend}%</span>
+                    </>
+                  ) : stats.revenueTrend < 0 ? (
+                    <>
+                      <ArrowDown className="h-3 w-3 mr-1 text-red-500" />
+                      <span className="text-red-500">{stats.revenueTrend}%</span>
+                    </>
+                  ) : (
+                    <span className="text-gray-500">0%</span>
+                  )}
+                  <span className="text-muted-foreground ml-1">rispetto a ieri</span>
+                </div>
+          </CardContent>
+        </Card>
+      </div>
+
+          <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-7">
+            <Card className="col-span-1 md:col-span-2 lg:col-span-4 transition-all duration-200 hover:shadow-md">
+                <CardHeader>
+                <CardTitle>Azioni Rapide</CardTitle>
+                </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <Button 
+                    onClick={handleCreateBooking}
+                    className="w-full flex items-center justify-center"
+                    size="lg"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Nuova Prenotazione
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="w-full flex items-center justify-center" 
+                    size="lg"
+                    onClick={() => navigate("/rooms")}
+                  >
+                    <Building className="mr-2 h-4 w-4" />
+                    Gestisci Camere
+                  </Button>
+                  </div>
+                <Button 
+                  variant="outline" 
+                  className="w-full flex items-center justify-center"
+                  onClick={handleOpenNotificationDialog}
+                >
+                  <Bell className="mr-2 h-4 w-4" />
+                  Invia Notifica
+                </Button>
+                </CardContent>
+              </Card>
+
+            <Card className="col-span-1 md:col-span-2 lg:col-span-3 transition-all duration-200 hover:shadow-md">
+                <CardHeader>
+                <CardTitle>Promemoria</CardTitle>
+                </CardHeader>
+                <CardContent>
+                <div className="space-y-3">
+                  {stats.pendingArrivals > 0 && (
+                    <motion.div 
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className="flex items-center p-2 bg-red-50 border border-red-100 rounded-md"
                     >
-                      <div className="font-medium">{booking.guest}</div>
-                      <div>{booking.room}</div>
-                      <div>{booking.checkIn}</div>
-                      <div>{booking.checkOut}</div>
-                      <div>
-                        <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                            booking.status === "Confirmed"
-                              ? "bg-green-100 text-green-800"
-                              : booking.status === "Pending"
-                                ? "bg-yellow-100 text-yellow-800"
-                                : "bg-gray-100 text-gray-800"
-                          }`}
-                        >
-                          {booking.status}
-                        </span>
+                      <div className="w-2 h-2 bg-red-500 rounded-full mr-2"></div>
+                      <p className="text-sm text-red-700">
+                        {stats.pendingArrivals} check-in da gestire oggi
+                      </p>
+                    </motion.div>
+                  )}
+                  {stats.pendingDepartures > 0 && (
+                    <motion.div 
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.1 }}
+                      className="flex items-center p-2 bg-amber-50 border border-amber-100 rounded-md"
+                    >
+                      <div className="w-2 h-2 bg-amber-500 rounded-full mr-2"></div>
+                      <p className="text-sm text-amber-700">
+                        {stats.pendingDepartures} check-out da gestire oggi
+                      </p>
+                    </motion.div>
+                  )}
+                  <motion.div 
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.2 }}
+                    className="flex items-center p-2 bg-blue-50 border border-blue-100 rounded-md"
+                  >
+                    <div className="w-2 h-2 bg-blue-500 rounded-full mr-2"></div>
+                    <p className="text-sm text-blue-700">
+                      Statistiche mensili disponibili
+                    </p>
+                  </motion.div>
+                  </div>
+                </CardContent>
+              </Card>
+          </div>
+
+          <Card className="transition-all duration-200 hover:shadow-md">
+            <CardHeader>
+              <CardTitle>Attività Recenti</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="border-l-2 border-green-500 pl-3 pb-3 pt-1">
+                  <p className="text-sm font-medium">Prenotazione Confermata</p>
+                  <p className="text-xs text-muted-foreground">
+                    La prenotazione #4872 è stata confermata per Mario Rossi, Camera 304
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">20 minuti fa</p>
+                </div>
+                
+                <div className="border-l-2 border-blue-500 pl-3 pb-3 pt-1">
+                  <p className="text-sm font-medium">Check-in Completato</p>
+                  <p className="text-xs text-muted-foreground">
+                    La famiglia Bianchi ha completato il check-in per la Suite 201
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">1 ora fa</p>
                       </div>
-                    </div>
-                  ))}
+                
+                <div className="border-l-2 border-amber-500 pl-3 pb-3 pt-1">
+                  <p className="text-sm font-medium">Richiesta Servizio in Camera</p>
+                  <p className="text-xs text-muted-foreground">
+                    Richiesta di pulizia extra per la camera 102 ricevuta
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">3 ore fa</p>
                 </div>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Room Management Tab */}
-        <TabsContent value="rooms" className="space-y-6">
+        <TabsContent value="availability">
           <RoomAvailability />
         </TabsContent>
 
-        {/* Channel Manager Tab */}
-        <TabsContent value="channels" className="space-y-6">
+        <TabsContent value="channels">
           <ChannelManager />
         </TabsContent>
       </Tabs>
+
+      {/* Modale per l'invio di una notifica personalizzata */}
+      <Dialog open={notificationDialogOpen} onOpenChange={setNotificationDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Invia Notifica</DialogTitle>
+            <DialogDescription>
+              Compila il form per inviare una notifica personalizzata.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="title">Titolo</Label>
+              <Input
+                id="title"
+                value={notificationForm.title}
+                onChange={handleNotificationChange("title")}
+                placeholder="Inserisci il titolo della notifica"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="message">Messaggio</Label>
+              <Textarea
+                id="message"
+                value={notificationForm.message}
+                onChange={handleNotificationChange("message")}
+                placeholder="Inserisci il contenuto della notifica"
+                rows={3}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="type">Tipo di notifica</Label>
+              <Select
+                value={notificationForm.type}
+                onValueChange={handleTypeChange}
+              >
+                <SelectTrigger id="type">
+                  <SelectValue placeholder="Seleziona il tipo di notifica" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="info">Informazione</SelectItem>
+                  <SelectItem value="warning">Avviso</SelectItem>
+                  <SelectItem value="success">Successo</SelectItem>
+                  <SelectItem value="error">Errore</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="link">Link (opzionale)</Label>
+              <Input
+                id="link"
+                value={notificationForm.link}
+                onChange={handleNotificationChange("link")}
+                placeholder="/notifications"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="secondary" onClick={handleCloseNotificationDialog}>
+              Annulla
+            </Button>
+            <Button type="button" onClick={handleSubmitNotification}>
+              Invia Notifica
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <div className="mt-8">
+        <Alert variant="info" className="bg-blue-50 border-blue-200">
+          <AlertCircle className="h-4 w-4 text-blue-600" />
+          <AlertTitle className="text-blue-800">Informazioni sul sistema di prenotazione</AlertTitle>
+          <AlertDescription className="text-blue-700">
+            <p>Il nostro sistema gestisce il check-out in modo efficiente:</p>
+            <ul className="list-disc pl-5 mt-2 space-y-1 text-sm">
+              <li>Le camere diventano <strong>disponibili per nuove prenotazioni dal giorno di check-out</strong></li>
+              <li>Una camera con check-out il 6 marzo sarà prenotabile a partire dal 6 marzo stesso</li>
+              <li>Camere con check-out giornaliero sono evidenziate con un <strong>gradiente speciale</strong> che indica "disponibilità dal pomeriggio"</li>
+              <li>Il sistema previene automaticamente prenotazioni sovrapposte sulla stessa camera</li>
+            </ul>
+          </AlertDescription>
+        </Alert>
+      </div>
+
+      <div className="mt-8">
+        <RoomOccupancyMap />
+      </div>
     </div>
   );
 };

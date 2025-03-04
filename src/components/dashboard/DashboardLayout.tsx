@@ -1,113 +1,109 @@
-import React, { useState, ReactNode } from "react";
-import { cn } from "@/lib/utils";
-import Header from "./Header";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Sidebar from "./Sidebar";
+import Header from "./Header";
+import { useAuth } from "../auth/AuthProvider";
+import { useToast } from "../ui/use-toast";
+import { fetchUserProfile } from "@/lib/supabase";
 
 interface DashboardLayoutProps {
-  children?: ReactNode;
+  children: React.ReactNode;
   title?: string;
   userRole?: "staff" | "management" | "restaurant";
-  userName?: string;
-  userAvatar?: string;
-  notifications?: Array<{
-    id: string;
-    title: string;
-    description: string;
-    time: string;
-    read: boolean;
-  }>;
 }
 
 const DashboardLayout = ({
   children,
   title = "Dashboard",
   userRole = "staff",
-  userName = "John Doe",
-  userAvatar = "https://api.dicebear.com/7.x/avataaars/svg?seed=John",
-  notifications = [
-    {
-      id: "1",
-      title: "New Booking",
-      description: "Room 101 has been booked for June 15-18",
-      time: "5 minutes ago",
-      read: false,
-    },
-    {
-      id: "2",
-      title: "Payment Received",
-      description: "Payment of $450 received for booking #1234",
-      time: "1 hour ago",
-      read: false,
-    },
-    {
-      id: "3",
-      title: "System Update",
-      description: "System will undergo maintenance tonight at 2 AM",
-      time: "3 hours ago",
-      read: true,
-    },
-  ],
 }: DashboardLayoutProps) => {
+  const { user, loading } = useAuth();
+  const { toast } = useToast();
+  const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [userData, setUserData] = useState<{
+    name: string;
+    avatar: string | null;
+  }>({
+    name: "",
+    avatar: null,
+  });
+  const [isLoading, setIsLoading] = useState(true);
 
-  const toggleSidebar = () => {
-    setSidebarCollapsed(!sidebarCollapsed);
-  };
+  // Reindirizza all'home page se l'utente non è autenticato
+  useEffect(() => {
+    if (!loading && !user) {
+      toast({
+        title: "Accesso richiesto",
+        description: "Effettua il login per accedere a questa pagina",
+        variant: "destructive",
+      });
+      navigate("/");
+    }
+  }, [user, loading, navigate, toast]);
 
-  const toggleMobileMenu = () => {
-    setMobileMenuOpen(!mobileMenuOpen);
-  };
+  // Carica i dati dell'utente
+  useEffect(() => {
+    const loadUserData = async () => {
+      if (user) {
+        try {
+          setIsLoading(true);
+          const profile = await fetchUserProfile();
+          
+          setUserData({
+            name: profile.name,
+            avatar: profile.avatar,
+          });
+        } catch (error) {
+          console.error("Errore nel caricamento del profilo utente:", error);
+          // Se non riusciamo a caricare il profilo, usiamo comunque i dati dall'auth
+          setUserData({
+            name: user.user_metadata?.name || user.email || "",
+            avatar: user.user_metadata?.avatar_url || null,
+          });
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+    
+    loadUserData();
+  }, [user]);
+
+  // Non mostrare nulla durante il caricamento
+  if (loading || isLoading) {
+    return (
+      <div className="flex justify-center items-center h-screen bg-gray-50">
+        <div className="flex flex-col items-center">
+          <div className="h-12 w-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+          <p className="mt-4 text-gray-500">Caricamento...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Se l'utente non è autenticato, non mostrare il layout
+  if (!user) {
+    return null;
+  }
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-gray-50">
-      {/* Mobile sidebar overlay */}
-      {mobileMenuOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50 md:hidden"
-          onClick={() => setMobileMenuOpen(false)}
-        />
-      )}
-
-      {/* Sidebar */}
-      <div
-        className={cn(
-          "fixed inset-y-0 left-0 z-50 transform md:relative md:translate-x-0 transition-all duration-300 ease-in-out",
-          mobileMenuOpen
-            ? "translate-x-0"
-            : "-translate-x-full md:translate-x-0",
-        )}
-      >
+    <div className="min-h-screen bg-gray-50">
+      <div className="flex h-screen overflow-hidden">
+        {/* Sidebar */}
         <Sidebar
           userRole={userRole}
-          userName={userName}
-          userAvatar={userAvatar}
+          userName={userData.name}
+          userAvatar={userData.avatar || "https://api.dicebear.com/7.x/avataaars/svg?seed=user"}
           collapsed={sidebarCollapsed}
-          onToggleCollapse={toggleSidebar}
-        />
-      </div>
-
-      {/* Main content */}
-      <div className="flex flex-col flex-1 w-full overflow-hidden">
-        <Header
-          title={title}
-          onMenuToggle={toggleMobileMenu}
-          user={{
-            name: userName,
-            email: `${userName.toLowerCase().replace(" ", ".")}@example.com`,
-            avatar: userAvatar,
-          }}
-          notifications={notifications}
+          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
         />
 
-        <main
-          className={cn(
-            "flex-1 overflow-auto transition-all duration-300",
-            sidebarCollapsed ? "md:ml-[70px]" : "md:ml-[280px]",
-          )}
-        >
-          {children}
-        </main>
+        {/* Main Content */}
+        <div className="relative flex flex-col flex-1 overflow-y-auto overflow-x-hidden">
+          <Header title={title} />
+          <main className="flex-1 p-4 md:p-6">{children}</main>
+        </div>
       </div>
     </div>
   );

@@ -285,7 +285,7 @@ const OrderProcessor = ({
       }
       return o;
     });
-    setOrders(updatedOrders);
+    setOrders(updatedOrders as Order[]);
   };
 
   const handleGenerateBill = (order: Order) => {
@@ -300,11 +300,11 @@ const OrderProcessor = ({
     // Mark order as completed
     const updatedOrders = orders.map((o) => {
       if (o.id === order.id) {
-        return { ...o, status: "completed" };
+        return { ...o, status: "completed" as const };
       }
       return o;
     });
-    setOrders(updatedOrders);
+    setOrders(updatedOrders as Order[]);
   };
 
   const getStatusBadge = (status: OrderItem["status"]) => {

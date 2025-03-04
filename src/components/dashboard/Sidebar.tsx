@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
   Hotel,
@@ -15,6 +15,7 @@ import {
   Globe,
   Menu,
   X,
+  BedDouble,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
@@ -37,6 +38,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "../ui/collapsible";
+import { useAuth } from "../auth/AuthProvider";
+import { useToast } from "../ui/use-toast";
 
 interface SidebarProps {
   userRole?: "staff" | "management" | "restaurant";
@@ -56,6 +59,9 @@ const Sidebar = ({
   const [isCollapsed, setIsCollapsed] = useState(collapsed);
   const [activeItem, setActiveItem] = useState("dashboard");
   const [openSubMenu, setOpenSubMenu] = useState<string | null>(null);
+  const { signOut } = useAuth();
+  const { toast } = useToast();
+  const navigate = useNavigate();
 
   const toggleCollapse = () => {
     setIsCollapsed(!isCollapsed);
@@ -66,88 +72,104 @@ const Sidebar = ({
     setOpenSubMenu(openSubMenu === key ? null : key);
   };
 
-  // Navigation items based on user role
-  const navigationItems = {
-    staff: [
-      {
-        name: "Dashboard",
-        icon: <Home size={20} />,
-        key: "dashboard",
-        path: "/dashboard",
-      },
-      {
-        name: "Bookings",
-        icon: <Calendar size={20} />,
-        key: "bookings",
-        path: "/bookings",
-        subItems: [
-          { name: "Calendar", path: "/bookings/calendar" },
-          { name: "Room Availability", path: "/bookings/availability" },
-          { name: "Create Booking", path: "/bookings/create" },
-        ],
-      },
-      {
-        name: "Channel Manager",
-        icon: <Globe size={20} />,
-        key: "channel",
-        path: "/channel-manager",
-      },
-    ],
-    management: [
-      {
-        name: "Dashboard",
-        icon: <Home size={20} />,
-        key: "dashboard",
-        path: "/dashboard",
-      },
-      {
-        name: "Reports",
-        icon: <BarChart3 size={20} />,
-        key: "reports",
-        path: "/reports",
-      },
-      {
-        name: "Users",
-        icon: <Users size={20} />,
-        key: "users",
-        path: "/users",
-      },
-      {
-        name: "Settings",
-        icon: <Settings size={20} />,
-        key: "settings",
-        path: "/settings",
-      },
-    ],
-    restaurant: [
-      {
-        name: "Dashboard",
-        icon: <Home size={20} />,
-        key: "dashboard",
-        path: "/restaurant",
-      },
-      {
-        name: "Menu",
-        icon: <Utensils size={20} />,
-        key: "menu",
-        path: "/restaurant/menu",
-      },
-      {
-        name: "Inventory",
-        icon: <BarChart3 size={20} />,
-        key: "inventory",
-        path: "/restaurant/inventory",
-      },
-      {
-        name: "Orders",
-        icon: <CreditCard size={20} />,
-        key: "orders",
-        path: "/restaurant/orders",
-      },
-    ],
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      toast({
+        title: "Logout effettuato",
+        description: "Hai effettuato il logout con successo.",
+        variant: "default",
+      });
+      navigate("/");
+    } catch (error) {
+      toast({
+        title: "Errore durante il logout",
+        description: "Si è verificato un errore. Riprova più tardi.",
+        variant: "destructive",
+      });
+      console.error("Logout error:", error);
+    }
   };
 
-  const items = navigationItems[userRole] || navigationItems.staff;
+  // Combined navigation items to show all sections
+  const navigationItems = [
+    // Hotel section
+    {
+      name: "Hotel Dashboard",
+      icon: <Home size={20} />,
+      key: "dashboard",
+      path: "/dashboard",
+    },
+    {
+      name: "Bookings",
+      icon: <Calendar size={20} />,
+      key: "bookings",
+      path: "/bookings",
+      subItems: [
+        { name: "Calendar", path: "/bookings/calendar" },
+        { name: "Room Availability", path: "/bookings/availability" },
+        { name: "Create Booking", path: "/bookings/create" },
+      ],
+    },
+    {
+      name: "Room Management",
+      icon: <BedDouble size={20} />,
+      key: "rooms",
+      path: "/rooms",
+    },
+    {
+      name: "Channel Manager",
+      icon: <Globe size={20} />,
+      key: "channel",
+      path: "/channel-manager",
+    },
+    // Restaurant section
+    {
+      name: "Restaurant Dashboard",
+      icon: <Utensils size={20} />,
+      key: "restaurant-dashboard",
+      path: "/restaurant",
+    },
+    {
+      name: "Menu Management",
+      icon: <Utensils size={20} />,
+      key: "menu",
+      path: "/restaurant/menu",
+    },
+    {
+      name: "Restaurant Inventory",
+      icon: <BarChart3 size={20} />,
+      key: "inventory",
+      path: "/restaurant/inventory",
+    },
+    {
+      name: "Restaurant Orders",
+      icon: <CreditCard size={20} />,
+      key: "orders",
+      path: "/restaurant/orders",
+    },
+    // Reports and Management
+    {
+      name: "Reports",
+      icon: <BarChart3 size={20} />,
+      key: "reports",
+      path: "/reports",
+    },
+    {
+      name: "Users",
+      icon: <Users size={20} />,
+      key: "users",
+      path: "/users",
+    },
+    {
+      name: "Settings",
+      icon: <Settings size={20} />,
+      key: "settings",
+      path: "/settings",
+    },
+  ];
+
+  const items = navigationItems;
 
   return (
     <div
@@ -328,15 +350,17 @@ const Sidebar = ({
               </div>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>My Account</DropdownMenuLabel>
+              <DropdownMenuLabel>Il mio Account</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <Settings className="mr-2 h-4 w-4" />
-                <span>Settings</span>
+              <DropdownMenuItem asChild>
+                <Link to="/settings">
+                  <Settings className="mr-2 h-4 w-4" />
+                  <span>Impostazioni</span>
+                </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={handleLogout}>
                 <LogOut className="mr-2 h-4 w-4" />
-                <span>Log out</span>
+                <span>Logout</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

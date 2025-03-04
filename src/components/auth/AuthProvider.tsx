@@ -21,7 +21,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       setError(null);
       const { error } = await supabase.auth.signInWithOAuth({
-        provider: "github", // Using GitHub as Google might not be enabled
+        provider: "google",
         options: {
           redirectTo: `${window.location.origin}/dashboard`,
         },

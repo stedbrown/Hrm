@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, EyeOff, Hotel, UserPlus } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { useToast } from "../ui/use-toast";
 
 import { Button } from "../ui/button";
 import {
@@ -55,10 +56,12 @@ interface SignUpFormProps {
 
 const SignUpForm = ({
   onSignUp = () => {},
-  isLoading = false,
+  isLoading: externalLoading = false,
 }: SignUpFormProps) => {
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -72,7 +75,9 @@ const SignUpForm = ({
 
   const handleSubmit = async (values: FormValues) => {
     try {
-      // Sign up with Supabase
+      setIsLoading(true);
+      
+      // Sign up with Supabase - inviamo i dati del profilo come metadati
       const { data, error } = await supabase.auth.signUp({
         email: values.email,
         password: values.password,
@@ -81,41 +86,76 @@ const SignUpForm = ({
             name: values.name,
             role: values.role,
           },
+          // Aggiungiamo emailRedirectTo per gestire la conferma email
+          emailRedirectTo: `${window.location.origin}/auth/confirm`,
         },
       });
 
-      if (error) throw error;
-
-      // The trigger function will automatically create a user record
-      // But we can also manually create it if needed
-      if (data.user) {
-        // Check if user record exists
-        const { data: existingUser } = await supabase
-          .from("users")
-          .select("id")
-          .eq("id", data.user.id)
-          .single();
-
-        // If user doesn't exist in our users table, create it
-        if (!existingUser) {
-          const { error: insertError } = await supabase.from("users").insert({
-            id: data.user.id,
-            email: values.email,
-            name: values.name,
-            role: values.role,
-          });
-
-          if (insertError) {
-            console.error("Error creating user record:", insertError);
-          }
-        }
+      if (error) {
+        console.error("Errore durante la registrazione:", error);
+        toast({
+          title: "Registrazione fallita",
+          description: error.message || "Si è verificato un errore durante la registrazione",
+          variant: "destructive",
+        });
+        throw error;
       }
 
-      onSignUp(values);
-      navigate("/");
+      // Controlla se l'utente ha bisogno di conferma email
+      if (data?.user && !data?.session) {
+        // Utente creato ma serve conferma email
+        localStorage.setItem(`pending_user_${data.user.id}`, JSON.stringify({
+          id: data.user.id,
+          email: values.email,
+          name: values.name,
+          role: values.role,
+        }));
+        
+        toast({
+          title: "Registrazione completata",
+          description: "Ti abbiamo inviato un'email di conferma. Per favore controlla anche nella cartella spam se non la trovi nella posta in arrivo.",
+          variant: "default",
+        });
+        
+        // Mostriamo un'altra notifica con istruzioni aggiuntive
+        setTimeout(() => {
+          toast({
+            title: "Info sulla conferma email",
+            description: (
+              <div>
+                Se non ricevi l'email, <a href="/email-confirmation" className="underline font-semibold">clicca qui</a> per richiederne un'altra.
+              </div>
+            ),
+            variant: "default",
+          });
+        }, 3000);
+        
+        onSignUp(values);
+        navigate("/");
+        return;
+      }
+
+      // Se arriviamo qui, abbiamo un utente e una sessione (già confermato o conferma non richiesta)
+      if (data.user) {
+        // Il trigger database si occuperà di creare il record utente
+        toast({
+          title: "Registrazione completata",
+          description: "Il tuo account è stato creato con successo.",
+          variant: "default",
+        });
+        
+        onSignUp(values);
+        navigate("/");
+      }
     } catch (error) {
-      console.error("Sign up error:", error);
-      // Handle sign up error
+      console.error("Errore durante la registrazione:", error);
+      toast({
+        title: "Registrazione fallita",
+        description: error instanceof Error ? error.message : "Si è verificato un errore imprevisto",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -236,8 +276,8 @@ const SignUpForm = ({
               )}
             />
 
-            <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? (
+            <Button type="submit" className="w-full" disabled={isLoading || externalLoading}>
+              {isLoading || externalLoading ? (
                 <div className="flex items-center justify-center">
                   <div className="h-4 w-4 border-2 border-current border-t-transparent animate-spin rounded-full mr-2" />
                   Creating account...
@@ -259,7 +299,7 @@ const SignUpForm = ({
             href="/"
             className={cn(
               "underline underline-offset-4 hover:text-primary",
-              isLoading && "pointer-events-none opacity-50",
+              (isLoading || externalLoading) && "pointer-events-none opacity-50",
             )}
           >
             Sign in

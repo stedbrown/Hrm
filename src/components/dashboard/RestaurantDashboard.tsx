@@ -27,6 +27,7 @@ import { Progress } from "../ui/progress";
 // Import restaurant components
 import MenuManager from "../restaurant/MenuManager";
 import OrderProcessor from "../restaurant/OrderProcessor";
+import InventoryTracker from "../restaurant/InventoryTracker";
 
 interface RestaurantDashboardProps {
   activeTab?: string;
@@ -302,17 +303,7 @@ const RestaurantDashboard = ({
 
           {/* Inventory Tab */}
           <TabsContent value="inventory">
-            <div className="flex flex-col items-center justify-center h-[600px] bg-gray-50 rounded-lg border border-dashed border-gray-300">
-              <ShoppingBag className="h-16 w-16 text-gray-400 mb-4" />
-              <h3 className="text-xl font-semibold mb-2">Inventory Tracker</h3>
-              <p className="text-gray-500 mb-4 text-center max-w-md">
-                Track inventory levels, set low stock alerts, and manage supply
-                orders
-              </p>
-              <Button>
-                <ShoppingBag className="h-4 w-4 mr-2" /> Set Up Inventory
-              </Button>
-            </div>
+            <InventoryTracker />
           </TabsContent>
         </Tabs>
       </div>
